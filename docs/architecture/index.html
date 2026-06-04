@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>notes-app — 아키텍처</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: system-ui, 'Pretendard Variable', sans-serif;
+        margin: 0;
+        padding: 2rem;
+        line-height: 1.6;
+        background: #f5f5f5;
+        color: #1a2233;
+      }
+      h1 {
+        font-size: 1.6rem;
+        margin-bottom: 0.25rem;
+      }
+      .meta {
+        color: #6b7280;
+        font-size: 0.85rem;
+        margin-bottom: 2rem;
+      }
+      section {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      }
+      h2 {
+        font-size: 1.1rem;
+        margin-top: 0;
+      }
+      .desc {
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+      }
+      .mermaid {
+        display: flex;
+        justify-content: center;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.25rem;
+        font-size: 0.8rem;
+        margin-bottom: 1rem;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .legend i {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        border: 1px solid;
+        display: inline-block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📐 notes-app 아키텍처</h1>
+    <p class="meta">생성: 2026-06-04 · 대상: src/ · React 19 + TypeScript + Vite</p>
+
+    <section>
+      <h2>① 컴포넌트 의존성 그래프</h2>
+      <p class="desc">
+        파일 간 import 관계입니다. 실선은 직접 import, 점선은 <code>useNotes()</code> 훅을 통한 상태
+        구독입니다.
+      </p>
+      <div class="legend">
+        <span><i style="background: #dbeafe; border-color: #2563eb"></i>진입점</span>
+        <span><i style="background: #fef3c7; border-color: #d97706"></i>상태 계층</span>
+        <span><i style="background: #dcfce7; border-color: #16a34a"></i>연결형 컴포넌트</span>
+        <span><i style="background: #f3e8ff; border-color: #9333ea"></i>프레젠테이션형</span>
+        <span><i style="background: #f1f5f9; border-color: #64748b"></i>API · 타입</span>
+      </div>
+      <pre class="mermaid">
+graph TD
+    main["main.tsx"] --> App["App.tsx"]
+    App --> NotesContext["NotesContext"]
+    App --> Layout["Layout"]
+    App --> NoteList["NoteList"]
+    App --> NoteEditor["NoteEditor"]
+    NoteList --> NoteItem["NoteItem"]
+    NoteList -. "useNotes" .-> NotesContext
+    NoteEditor -. "useNotes" .-> NotesContext
+    NotesContext --> api["api/notes"]
+    NotesContext --> types["types/note"]
+    api --> types
+    NoteItem --> types
+
+    classDef entry fill:#dbeafe,stroke:#2563eb,color:#1a2233;
+    classDef state fill:#fef3c7,stroke:#d97706,color:#1a2233;
+    classDef connected fill:#dcfce7,stroke:#16a34a,color:#1a2233;
+    classDef presentational fill:#f3e8ff,stroke:#9333ea,color:#1a2233;
+    classDef data fill:#f1f5f9,stroke:#64748b,color:#1a2233;
+    class main,App entry;
+    class NotesContext state;
+    class NoteList,NoteEditor connected;
+    class NoteItem,Layout presentational;
+    class api,types data;
+    </pre
+      >
+    </section>
+
+    <section>
+      <h2>② 데이터 흐름도</h2>
+      <p class="desc">
+        읽기(최초 로드)와 쓰기(생성·수정·삭제) 양방향 데이터 흐름입니다. 모든 흐름은
+        <code>NotesContext</code>를 거치며, 낙관적 업데이트 없이 <strong>API 응답을 받은 뒤</strong>
+        <code>notes</code> 상태를 갱신합니다.
+      </p>
+      <pre class="mermaid">
+flowchart TD
+    subgraph READ["📥 최초 로드 (읽기)"]
+      direction TB
+      mount(["App 마운트"]) --> effect["NotesContext<br/>useEffect (1회)"]
+      effect -->|"fetchNotes()"| rApi["api/notes"]
+      rApi -->|"GET :3001/notes"| rSrv[("json-server<br/>db.json")]
+      rSrv -->|"Note[]"| rRes{"성공?"}
+      rRes -->|"예"| setNotes["setNotes(목록)"]
+      rRes -->|"아니오"| setErr["setError(메시지)"]
+      setNotes --> doneR["loading = false"]
+      setErr --> doneR
+    end
+
+    subgraph WRITE["✏️ 변경 (쓰기)"]
+      direction TB
+      user(["사용자 액션<br/>저장 / 삭제"]) --> ui["NoteEditor · NoteList"]
+      ui -->|"createNote / updateNote / deleteNote"| ctx["NotesContext 액션"]
+      ctx -->|"api 호출"| wApi["api/notes"]
+      wApi -->|"POST / PATCH / DELETE :3001"| wSrv[("json-server<br/>db.json")]
+      wSrv -->|"갱신된 Note"| patch["setNotes(부분 갱신)<br/>추가 · 교체 · 제거"]
+    end
+
+    doneR --> store[("notes 상태")]
+    patch --> store
+    store -.->|"useNotes() 구독 → 리렌더"| view["UI 컴포넌트<br/>(NoteList · NoteEditor)"]
+
+    classDef actor fill:#dbeafe,stroke:#2563eb,color:#1a2233;
+    classDef comp fill:#dcfce7,stroke:#16a34a,color:#1a2233;
+    classDef state fill:#fef3c7,stroke:#d97706,color:#1a2233;
+    classDef data fill:#f1f5f9,stroke:#64748b,color:#1a2233;
+    classDef decision fill:#fee2e2,stroke:#dc2626,color:#1a2233;
+    class mount,user actor;
+    class ui,view,effect comp;
+    class ctx,setNotes,setErr,patch,doneR,store state;
+    class rApi,wApi,rSrv,wSrv data;
+    class rRes decision;
+    </pre>
+    </section>
+
+    <section>
+      <h2>③ 상태 흐름도</h2>
+      <p class="desc">
+        앱 화면의 상태 전이입니다. 데이터 로딩 상태(<code>NotesContext</code>의
+        <code>loading</code>/<code>error</code>)와 에디터 화면 상태(<code>App.tsx</code>의
+        <code>selectedNoteId</code> · <code>isCreating</code> 조합)를 상태 머신으로 표현합니다.
+      </p>
+      <pre class="mermaid">
+stateDiagram-v2
+    [*] --> 로딩중
+    로딩중 --> 오류: fetchNotes 실패
+    로딩중 --> 빈화면: fetchNotes 성공
+
+    note right of 빈화면
+      selectedNoteId = null
+      isCreating = false
+    end note
+
+    빈화면 --> 작성중: + 새 노트
+    빈화면 --> 편집중: 노트 선택
+
+    작성중 --> 빈화면: 저장(생성) / 취소
+    작성중 --> 편집중: 사이드바 노트 선택
+
+    편집중 --> 작성중: + 새 노트
+    편집중 --> 편집중: 저장(수정) / 다른 노트 선택
+    편집중 --> 빈화면: 선택 노트 삭제
+
+    note left of 작성중
+      isCreating = true
+    end note
+    note right of 편집중
+      selectedNoteId 설정됨
+      isCreating = false
+    end note
+    </pre
+      >
+    </section>
+
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+  </body>
+</html>
