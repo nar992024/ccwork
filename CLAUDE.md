@@ -30,6 +30,14 @@ React 19 + TypeScript + Vite 기반의 **노트 앱 실습(강의용) 프로젝�
 - 훅은 `npm install` 시 `prepare` 스크립트(`husky`)로 자동 설치되므로 별도 설정이 필요 없다.
 - 긴급 시 `git commit --no-verify`로 우회할 수 있으나 상시 사용은 지양한다.
 
+### 커밋 메시지 규칙 (commitlint)
+
+- **commit-msg 훅**(`.husky/commit-msg`)이 `commitlint`로 메시지 형식을 검증한다. 규칙 위반 시 커밋이 거부된다.
+- 형식: **`type: 설명`** 또는 `type(scope): 설명` (예: `feat: 노트 검색 기능 추가`). 설명은 한국어로 쓴다.
+- 허용 type: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert` `init` (`commitlint.config.mjs`에서 관리).
+- 제목 끝 마침표 금지, 최대 100자. 제목 대소문자 규칙은 한국어 허용을 위해 비활성화됨.
+- 규칙 수정은 `commitlint.config.mjs`에서 한다.
+
 ## 아키텍처
 
 데이터 흐름은 단방향 3계층이다:
